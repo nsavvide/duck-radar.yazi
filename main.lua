@@ -16,7 +16,6 @@ local function entry()
       "-maxdepth 3 " ..
       "-type f " ..
       "-mtime -7 " ..
-      "-size -100M " ..
       "-not -path '*/.*' " ..
       "-not -path '*/node_modules/*' " ..
       "-not -path '*/.git/*' " ..

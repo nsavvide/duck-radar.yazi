@@ -55,7 +55,7 @@ desc = "🦆 Duck Radar - Recent Files"
 - **Copy or Move**: Press `Enter` to copy files, `Ctrl-X` to move them
 - **Multi-Select**: Use `Tab` to select multiple files
 - **Rich Preview**: Syntax-highlighted file contents with bat
-- **Intelligent Filtering**: Automatically excludes `.git`, `node_modules`, cache directories, and files over 100MB
+- **Intelligent Filtering**: Automatically excludes `.git`, `node_modules`, cache directories.
 
 ## Keybindings
 
