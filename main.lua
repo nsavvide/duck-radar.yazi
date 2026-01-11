@@ -13,31 +13,24 @@ local function entry()
   local cmd = "find '" .. home .. "/Downloads' " ..
       "'" .. home .. "/Documents' " ..
       "'" .. home .. "/Desktop' " ..
+      "'" .. home .. "/Pictures' " ..
       "-maxdepth 3 " ..
       "-type f " ..
       "-mtime -7 " ..
       "-not -path '*/.*' " ..
       "-not -path '*/node_modules/*' " ..
       "-not -path '*/.git/*' " ..
-      "-not -path '*/cache/*' " ..
-      "-not -path '*/Cache/*' " ..
-      "-not -path '*/__pycache__/*' " ..
-      "-not -path '*/target/*' " ..
-      "-not -path '*/build/*' " ..
       "-printf '%T@ %p\\n' 2>/dev/null " ..
       "| sort -rn " ..
       "| head -200 " ..
       "| cut -d' ' -f2- " ..
       "| fzf " ..
-      "--prompt='Recent Files> ' " ..
+      "--prompt='Recent File> ' " ..
       "--preview='bat --color=always --style=numbers --line-range :100 {} 2>/dev/null || ls -lh {}' " ..
       "--preview-window='right:60%:wrap' " ..
-      "--header='Tab=multi • Enter=COPY • Ctrl-X=MOVE • Sorted by modification time' " ..
-      "--multi " ..
+      "--header='Enter=COPY • Ctrl-X=MOVE • Sorted by modification time' " ..
       "--bind='ctrl-d:preview-down,ctrl-u:preview-up' " ..
-      "--bind='enter:execute-silent(echo COPY)+accept' " ..
-      "--bind='ctrl-x:execute-silent(echo MOVE)+accept' " ..
-      "--expect='enter,ctrl-x'"
+      "--expect='enter,ctrl-x'" -- Keeps the ability to distinguish Move vs Copy
 
   ya.dbg("Running search")
 
@@ -54,73 +47,39 @@ local function entry()
   end
 
   local output, err = child:wait_with_output()
-  if not output then
-    return fail("Cannot read output: %s", err)
-  end
-
-  ya.dbg("Exit code: " .. tostring(output.status.code))
-
-  if output.status.code == 130 then
-    ya.dbg("User cancelled")
-    return
-  elseif output.status.code == 1 then
-    return ya.notify { title = "Duck Radar", content = "No file selected", timeout = 3 }
-  elseif output.status.code ~= 0 then
-    return fail("fzf exited with code %s", output.status.code)
-  end
+  if not output or output.status.code ~= 0 then return end
 
   local lines = {}
   for line in output.stdout:gmatch("[^\n]+") do
     table.insert(lines, line)
   end
 
-  if #lines == 0 then
+  if #lines < 2 then
     return ya.notify { title = "Duck Radar", content = "No file selected", timeout = 3 }
   end
 
-  local action = "copy"
-  local key = lines[1]
-  if key == "ctrl-x" then
-    action = "move"
-  end
+  -- lines[1] is the key (enter or ctrl-x)
+  -- lines[2] is the file path
+  local action = lines[1] == "ctrl-x" and "move" or "copy"
+  local file = lines[2]
+  local cwd = get_cwd()
 
-  ya.dbg("Action: " .. action)
+  ya.dbg("Action: " .. action .. " on " .. file)
 
-  local files = {}
-  for i = 2, #lines do
-    if lines[i] ~= "" and lines[i] ~= "COPY" and lines[i] ~= "MOVE" then
-      table.insert(files, lines[i])
-    end
-  end
+  local safe_file = "'" .. file:gsub("'", "'\\''") .. "'"
+  local cmd_verb = action == "move" and "mv" or "cp -r"
+  local exec_cmd = cmd_verb .. " " .. safe_file .. " '" .. cwd .. "/' 2>&1"
 
-  ya.dbg("Selected " .. #files .. " files for " .. action)
+  local result = Command(shell):arg("-c"):arg(exec_cmd):output()
 
-  if #files > 0 then
-    local cwd = get_cwd()
-    ya.dbg("" .. action .. " to: " .. cwd)
-
-    local file_list = {}
-    for _, file in ipairs(files) do
-      table.insert(file_list, "'" .. file:gsub("'", "'\\''") .. "'")
-    end
-
-    local cmd_verb = action == "move" and "mv" or "cp -r"
-    local copy_cmd = cmd_verb .. " " .. table.concat(file_list, " ") .. " '" .. cwd .. "/' 2>&1"
-
-    ya.dbg("Command: " .. copy_cmd)
-
-    local result = Command(shell):arg("-c"):arg(copy_cmd):output()
-
-    if result and result.status.success then
-      local verb = action == "move" and "Moved" or "Copied"
-      ya.notify {
-        title = "Duck Radar",
-        content = string.format("%s %d file(s)!", verb, #files),
-        timeout = 3
-      }
-    else
-      return fail(action .. " failed")
-    end
+  if result and result.status.success then
+    ya.notify {
+      title = "Duck Radar",
+      content = string.format("%s 1 file!", action == "move" and "Moved" or "Copied"),
+      timeout = 3
+    }
+  else
+    return fail(action .. " failed")
   end
 end
 

@@ -53,7 +53,6 @@ desc = "🦆 Duck Radar - Recent Files"
 - **Smart Search**: Finds files modified in the last 7 days across Downloads, Documents, Desktop
 - **Fast Performance**: Limited depth (3 levels) and top 200 results for instant response
 - **Copy or Move**: Press `Enter` to copy files, `Ctrl-X` to move them
-- **Multi-Select**: Use `Tab` to select multiple files
 - **Rich Preview**: Syntax-highlighted file contents with bat
 - **Intelligent Filtering**: Automatically excludes `.git`, `node_modules`, cache directories.
 
@@ -62,7 +61,6 @@ desc = "🦆 Duck Radar - Recent Files"
 Inside the fzf picker:
 
 - `j/k` or `↑/↓` - Navigate
-- `Tab` - Multi-select files
 - `Enter` - **Copy** selected files to current directory
 - `Ctrl-X` - **Move** selected files to current directory
 - `Ctrl-D/U` - Scroll preview down/up
