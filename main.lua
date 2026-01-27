@@ -1,28 +1,67 @@
+local M = {}
+
 local shell = os.getenv("SHELL"):match(".*/(.*)")
 local get_cwd = ya.sync(function() return tostring(cx.active.current.cwd) end)
 local fail = function(s, ...)
   ya.notify { title = "Duck Radar", content = string.format(s, ...), timeout = 5, level = "error" }
 end
 
-local function entry()
-  ya.dbg("Duck Radar starting")
-  local _permit = ya.hide()
+-- User config
+local apply_config = ya.sync(function(st, cfg)
+	cfg = cfg or { dirs = {}}
 
-  local home = os.getenv("HOME")
+  -- Setup the folder string
+  local homeDir = os.getenv("HOME")
+  dirs = {
+    homeDir .. "/Downloads",
+    homeDir .. "/Documents",
+    homeDir .. "/Desktop",
+    homeDir .. "/Pictures"
+  }
 
-  local cmd = "find '" .. home .. "/Downloads' " ..
-      "'" .. home .. "/Documents' " ..
-      "'" .. home .. "/Desktop' " ..
-      "'" .. home .. "/Pictures' " ..
-      "-maxdepth 3 " ..
-      "-type f " ..
-      "-mtime -7 " ..
-      "-not -path '*/.*' " ..
-      "-not -path '*/node_modules/*' " ..
-      "-not -path '*/.git/*' " ..
-      "-printf '%T@ %p\\n' 2>/dev/null " ..
+  for i = 1, #cfg.dirs do
+    dirs[#dirs+1] = cfg.dirs[i]
+  end
+
+  -- Surround with single quotes
+  for i=1, #dirs do
+    dirs[i] = "'" .. dirs[i] .. "'"
+  end
+
+  st.dirs = table.concat(dirs, " ")
+
+  -- Other settings
+  st.app = cfg.app or "find"
+  st.changedWithin = cfg.changedWithin
+  st.maxDepth = cfg.maxDepth or "3"
+  st.resultLimit = cfg.resultLimit or "200"
+end)
+
+function M:setup(cfg)
+  apply_config(cfg)
+end
+
+local get_findApp = ya.sync(function(st) return st.app end)
+local get_changed_within = ya.sync(function(st) return st.changedWithin end)
+
+local get_cmd_fd = ya.sync(function(st)
+  local dirs = st.dirs .. " "
+  local changedWithin = st.changedWithin or "7d"
+  local maxDepth = st.maxDepth
+  local resultLimit = st.resultLimit
+
+  return "fd " ..
+      ". " ..
+      dirs ..
+      "--max-depth " .. maxDepth .. " " ..
+      "--type f " ..
+      "--changed-within " .. changedWithin .. " " ..
+      "--hidden --no-ignore " ..
+      "--exclude '.git' " ..
+      "--exclude 'node_modules' " ..
+      "--exec-batch stat -f '%m %N' " ..
       "| sort -rn " ..
-      "| head -200 " ..
+      "| head -" .. resultLimit .. " " ..
       "| cut -d' ' -f2- " ..
       "| fzf " ..
       "--prompt='Recent File> ' " ..
@@ -31,8 +70,51 @@ local function entry()
       "--header='Enter=COPY • Ctrl-X=MOVE • Sorted by modification time' " ..
       "--bind='ctrl-d:preview-down,ctrl-u:preview-up' " ..
       "--expect='enter,ctrl-x'" -- Keeps the ability to distinguish Move vs Copy
+end)
 
-  ya.dbg("Running search")
+local get_cmd_find = ya.sync(function(st)
+    local dirs = st.dirs .. " "
+    local changedWithin = st.changedWithin or "7"
+    local maxDepth = st.maxDepth
+    local resultLimit = st.resultLimit
+
+
+    return "find " ..
+      dirs ..
+      "-maxdepth " .. maxDepth .. " " ..
+      "-type f " ..
+      "-mtime -" .. changedWithin .. " " ..
+      "-not -path '*/.*' " ..
+      "-not -path '*/node_modules/*' " ..
+      "-not -path '*/.git/*' " ..
+      "-printf '%T@ %p\\n' 2>/dev/null " ..
+      "| sort -rn " ..
+      "| head -" .. resultLimit .. " " ..
+      "| cut -d' ' -f2- " ..
+      "| fzf " ..
+      "--prompt='Recent File> ' " ..
+      "--preview='bat --color=always --style=numbers --line-range :100 {} 2>/dev/null || ls -lh {}' " ..
+      "--preview-window='right:60%:wrap' " ..
+      "--header='Enter=COPY • Ctrl-X=MOVE • Sorted by modification time' " ..
+      "--bind='ctrl-d:preview-down,ctrl-u:preview-up' " ..
+      "--expect='enter,ctrl-x'" -- Keeps the ability to distinguish Move vs Copy
+end)
+
+function M:entry(self)
+  ya.dbg("Duck Radar starting")
+  local _permit = ui.hide()
+
+  -- determine the app to use.
+  local app = get_findApp()
+  if app == nil then app = "find" end
+  local cmd = nil
+  if app == "find" then
+    cmd = get_cmd_find()
+  else
+    cmd = get_cmd_fd()
+  end
+  
+  ya.dbg("Running search with " .. app)
 
   local child, err = Command(shell)
       :arg("-c")
@@ -83,4 +165,4 @@ local function entry()
   end
 end
 
-return { entry = entry }
+return M
