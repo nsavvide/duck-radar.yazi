@@ -6,7 +6,7 @@ end
 
 local function entry()
   ya.dbg("Duck Radar starting")
-  local _permit = ya.hide()
+  local _permit = ui.hide()
 
   local home = os.getenv("HOME")
 
