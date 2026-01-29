@@ -32,7 +32,7 @@ sudo apt install fzf bat
 ## Installation
 
 ```bash
-ya pack add nsavvide/duck-radar
+ya pkg add nsavvide/duck-radar
 ```
 
 Or manually: place the plugin directory at `~/.config/yazi/plugins/duck-radar.yazi/`
