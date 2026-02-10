@@ -42,7 +42,7 @@ Or manually: place the plugin directory at `~/.config/yazi/plugins/duck-radar.ya
 Add a keybinding to your `keymap.toml`:
 
 ```toml
-[[manager.prepend_keymap]]
+[[mgr.prepend_keymap]]
 on = "<C-r>" # or your preferred key
 run = "plugin duck-radar"
 desc = "🦆 Duck Radar - Recent Files"
