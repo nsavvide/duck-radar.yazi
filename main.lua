@@ -19,10 +19,10 @@ local apply_config = ya.sync(function(st, cfg)
   }
 
   for i = 1, #cfg.dirs do
-    dirs[#dirs+1] = cfg.dirs[i]
+    dirs[#dirs + 1] = cfg.dirs[i]
   end
 
-  for i=1, #dirs do
+  for i = 1, #dirs do
     dirs[i] = "'" .. dirs[i]:gsub("'", "'\\''") .. "'"
   end
 
@@ -72,12 +72,12 @@ local get_cmd_fd = ya.sync(function(st)
 end)
 
 local get_cmd_find = ya.sync(function(st)
-    local dirs = st.dirs .. " "
-    local changedWithin = st.changedWithin or "7"
-    local maxDepth = st.maxDepth
-    local resultLimit = st.resultLimit
+  local dirs = st.dirs .. " "
+  local changedWithin = st.changedWithin or "7"
+  local maxDepth = st.maxDepth
+  local resultLimit = st.resultLimit
 
-    return "find " ..
+  return "find " ..
       dirs ..
       "-maxdepth " .. maxDepth .. " " ..
       "-type f " ..
