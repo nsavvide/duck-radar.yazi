@@ -66,23 +66,25 @@ Inside the fzf picker:
 - `Ctrl-D/U` - Scroll preview down/up
 - `Esc` or `Ctrl-C` - Cancel
 
-## Configuration
+## Setup
 
-You can customize the search by editing the plugin's `entry()` function in `main.lua`:
+Add the following to your `~/.config/yazi/init.lua` (all fields are optional; defaults shown):
 
 ```lua
--- Change time range (days)
-"-mtime -7 " .. -- Change to -3 for last 3 days, -30 for last month
-
--- Change max depth
-"-maxdepth 3 " .. -- Change to 2 for faster, 4 for deeper search
-
--- Change result limit
-"| head -200 " .. -- Change to 50 or 500 as needed
-
--- Add more directories to search
-local cmd = "find '" .. home .. "/Downloads' " ..
-"'" .. home .. "/Projects' " .. -- Add your custom paths
+require("duck-radar"):setup({
+    -- Extra dirs to search in addition to ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures
+    dirs = {
+        -- "/path/to/extra/dir",
+    },
+    -- 'find' or 'fd'
+    app = "find",
+    -- Time range; when using fd, use its format (e.g. "7d") instead of find's (e.g. "7")
+    changedWithin = "7",
+    -- Max depth to search. 2 for faster, 4 for deeper search
+    maxDepth = "3",
+    -- Amount of results to show
+    resultLimit = 200,
+})
 ```
 
 ## Acknowledgements
