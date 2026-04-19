@@ -33,9 +33,6 @@ local apply_config = ya.sync(function(st, cfg)
   st.resultLimit = cfg.resultLimit or "200"
 end)
 
--- Initialize defaults so plugin works without an explicit setup() call
-apply_config({})
-
 function M:setup(cfg)
   apply_config(cfg)
 end
@@ -100,6 +97,7 @@ end)
 
 function M:entry()
   ya.dbg("Duck Radar starting")
+  if not get_findApp() then apply_config({}) end
   local _permit = ya.hide()
 
   local app = get_findApp()
