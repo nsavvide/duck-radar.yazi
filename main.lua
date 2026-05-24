@@ -98,7 +98,7 @@ end)
 function M:entry()
   ya.dbg("Duck Radar starting")
   if not get_findApp() then apply_config({}) end
-  local _permit = ya.hide()
+  local _permit = ui.hide()
 
   local app = get_findApp()
   if app ~= "find" and app ~= "fd" then
