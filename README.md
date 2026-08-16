@@ -52,23 +52,24 @@ desc = "🦆 Duck Radar - Recent Files"
 
 - **Smart Search**: Finds files modified in the last 7 days across Downloads, Documents, Desktop
 - **Fast Performance**: Limited depth (3 levels) and top 200 results for instant response
-- **Copy or Move**: Press `Enter` to copy files, `Ctrl-X` to move them
+- **Copy, Move, or Jump**: Press `Enter` to jump to the file in place, `Ctrl-Y` to copy it, `Ctrl-X` to move it
 - **Rich Preview**: Syntax-highlighted file contents with bat
-- **Intelligent Filtering**: Automatically excludes `.git`, `node_modules`, cache directories.
+- **Intelligent Filtering**: Exclude files/dirs by name or absolute path via `excludePatterns` (none excluded by default).
 
 ## Keybindings
 
 Inside the fzf picker:
 
 - `j/k` or `↑/↓` - Navigate
-- `Enter` - **Copy** selected files to current directory
-- `Ctrl-X` - **Move** selected files to current directory
+- `Enter` - **Jump** to the selected file in place (reveals it in Yazi without copying/moving)
+- `Ctrl-Y` - **Copy** selected file to current directory (or into the paste buffer, see `pasteBuffer` below)
+- `Ctrl-X` - **Move** selected file to current directory (or into the paste buffer, see `pasteBuffer` below)
 - `Ctrl-D/U` - Scroll preview down/up
 - `Esc` or `Ctrl-C` - Cancel
 
 ## Setup
 
-Add the following to your `~/.config/yazi/init.lua` (all fields are optional; defaults shown):
+Add the following to your `~/.config/yazi/init.lua` (all fields are optional; defaults shown unless noted):
 
 ```lua
 require("duck-radar"):setup({
@@ -76,14 +77,61 @@ require("duck-radar"):setup({
     dirs = {
         -- "/path/to/extra/dir",
     },
+    -- Patterns to exclude from search. Plain names (e.g. "node_modules")
+    -- match that file/dir at any depth. Patterns starting with "/" are
+    -- absolute paths (e.g. os.getenv("HOME") .. "/Library") and exclude
+    -- everything under that exact directory. None excluded by default.
+    excludePatterns = {},
     -- 'find' or 'fd'
     app = "find",
-    -- Time range; when using fd, use its format (e.g. "7d") instead of find's (e.g. "7")
-    changedWithin = "7",
+    -- Only show files modified within this many days
+    changedWithin = 7,
     -- Max depth to search. 2 for faster, 4 for deeper search
-    maxDepth = "3",
+    maxDepth = 3,
     -- Amount of results to show
     resultLimit = 200,
+    -- If true, Copy/Move don't paste immediately — they yank the file into
+    -- Yazi's own clipboard instead, so you can press 'p' to paste it yourself
+    pasteBuffer = false,
+    -- Whether to also search the current directory
+    includeCwd = true,
+})
+```
+
+Example using `fd`, extra directories search:
+
+```lua
+require("duck-radar"):setup({
+    -- Extra dirs to search in addition to ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures
+    dirs = {
+        -- Launch directory
+        os.getenv("PWD"),
+        -- "/path/to/extra/dir",
+        os.getenv("HOME") .. "/Downloads",
+        os.getenv("HOME") .. "/Documents",
+        os.getenv("HOME") .. "/Desktop",
+        os.getenv("HOME") .. "/Pictures",
+    },
+    -- filter  by patterns
+    excludePatterns = {
+        ".git",
+        "node_modules",
+        ".DS_Store",
+        -- absolute path to exclude
+        os.getenv("HOME") .. "/Library",
+    },
+    -- 'find' or 'fd'
+    app = "fd",
+    -- Time range in days
+    changedWithin = 7,
+    -- Max depth to search. 2 for faster, 4 for deeper search
+    maxDepth = 2,
+    -- Amount of results to show
+    resultLimit = 200,
+    -- Copy to the buffer only when you use ctrl-y and ctrl-x, then you can paste with p.
+    pasteBuffer = true,
+    -- Include current working directory
+    includeCwd = true,
 })
 ```
 

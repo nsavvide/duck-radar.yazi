@@ -8,15 +8,7 @@ end
 
 local apply_config = ya.sync(function(st, cfg)
   cfg = cfg or {}
-  cfg.dirs = cfg.dirs or {}
-
-  local homeDir = os.getenv("HOME")
-  local dirs = {
-    homeDir .. "/Downloads",
-    homeDir .. "/Documents",
-    homeDir .. "/Desktop",
-    homeDir .. "/Pictures"
-  }
+  local dirs = cfg.dirs or {}
 
   for i = 1, #cfg.dirs do
     dirs[#dirs + 1] = cfg.dirs[i]
@@ -28,71 +20,127 @@ local apply_config = ya.sync(function(st, cfg)
 
   st.dirs = table.concat(dirs, " ")
   st.app = cfg.app or "find"
-  st.changedWithin = cfg.changedWithin
+  st.changedWithin = cfg.changedWithin or 7
   st.maxDepth = cfg.maxDepth or "3"
   st.resultLimit = cfg.resultLimit or "200"
+  st.pasteBuffer = cfg.pasteBuffer or false
+  st.includeCwd = cfg.includeCwd
+  if st.includeCwd == nil then st.includeCwd = true end
+
+  local excludePatterns = cfg.excludePatterns or {}
+  local excludeNames, excludeAbsPaths = {}, {}
+  for i = 1, #excludePatterns do
+    local p = excludePatterns[i]
+    local safe = "'" .. p:gsub("'", "'\\''") .. "'"
+    if p:sub(1, 1) == "/" then
+      excludeAbsPaths[#excludeAbsPaths + 1] = safe
+    else
+      excludeNames[#excludeNames + 1] = safe
+    end
+  end
+  st.excludeNames = excludeNames
+  st.excludeAbsPaths = excludeAbsPaths
 end)
+
+-- Neither `fd --exclude` nor `find -path` reliably match absolute paths
+-- across multiple search roots, so absolute-path patterns are filtered out
+-- with a `grep -v` prefix match after the search instead of natively.
+local function abs_path_filter(excludeAbsPaths)
+  local pipe = ""
+  for i = 1, #excludeAbsPaths do
+    pipe = pipe .. "| grep -vF " .. excludeAbsPaths[i] .. " "
+  end
+  return pipe
+end
+
+local function get_extra_cmd(resultLimit)
+  return "| sort -rn " ..
+      "| head -" .. resultLimit .. " " ..
+      "| cut -d' ' -f2- " ..
+      "| awk '!seen[$0]++' " ..  -- this fixes duplicates from overlapping search roots 
+      "| fzf " ..
+      "--prompt='Recent File> ' " ..
+      "--preview='bat --color=always --style=numbers --line-range :100 {} 2>/dev/null || ls -lh {}' " ..
+      "--preview-window='right:60%:wrap' " ..
+      "--header='enter=jump • ctrl-y=copy • ctrl-x=move • Sorted by modification time' " ..
+      "--bind='ctrl-d:preview-down,ctrl-u:preview-up' " ..
+      "--expect='enter,ctrl-x,ctrl-y'"
+end
 
 function M:setup(cfg)
   apply_config(cfg)
 end
 
 local get_findApp = ya.sync(function(st) return st.app end)
+local get_pasteBuffer = ya.sync(function(st) return st.pasteBuffer end)
 
 local get_cmd_fd = ya.sync(function(st)
   local dirs = st.dirs .. " "
-  local changedWithin = st.changedWithin or "7d"
+  local changedWithin = st.changedWithin .. "d"
   local maxDepth = st.maxDepth
   local resultLimit = st.resultLimit
+  local searchRoot = st.includeCwd and (get_cwd() .. " ") or ""
+
+  local excludeFlags = {}
+  for i = 1, #st.excludeNames do
+    excludeFlags[i] = "--exclude " .. st.excludeNames[i]
+  end
+  local excludes = table.concat(excludeFlags, " ") .. " "
+  local absFilter = abs_path_filter(st.excludeAbsPaths)
 
   -- Uses a portable sh loop to print "<mtime> <path>", falling back to BSD stat on macOS
   return "fd " ..
       ". " ..
       dirs ..
+      searchRoot ..
       "--max-depth " .. maxDepth .. " " ..
       "--type f " ..
       "--changed-within " .. changedWithin .. " " ..
       "--hidden --no-ignore " ..
-      "--exclude '.git' " ..
-      "--exclude 'node_modules' " ..
+      excludes ..
       "--exec-batch sh -c 'for f; do printf \"%s %s\\n\" \"$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\")\" \"$f\"; done' sh " ..
-      "| sort -rn " ..
-      "| head -" .. resultLimit .. " " ..
-      "| cut -d' ' -f2- " ..
-      "| fzf " ..
-      "--prompt='Recent File> ' " ..
-      "--preview='bat --color=always --style=numbers --line-range :100 {} 2>/dev/null || ls -lh {}' " ..
-      "--preview-window='right:60%:wrap' " ..
-      "--header='Enter=COPY • Ctrl-X=MOVE • Sorted by modification time' " ..
-      "--bind='ctrl-d:preview-down,ctrl-u:preview-up' " ..
-      "--expect='enter,ctrl-x'"
+      absFilter ..
+      get_extra_cmd(resultLimit)
 end)
 
 local get_cmd_find = ya.sync(function(st)
   local dirs = st.dirs .. " "
-  local changedWithin = st.changedWithin or "7"
+  local changedWithin = st.changedWithin
   local maxDepth = st.maxDepth
   local resultLimit = st.resultLimit
+  local searchRoot = st.includeCwd and (get_cwd() .. " ") or ""
 
+  local excludeFlags = {}
+  for i = 1, #st.excludeNames do
+    local p = st.excludeNames[i]
+    excludeFlags[i] = "-not -name " .. p .. " -not -path '*/" .. p:sub(2, -2) .. "/*'"
+  end
+  local excludes = table.concat(excludeFlags, " ") .. " "
+  local absFilter = abs_path_filter(st.excludeAbsPaths)
+
+  -- Uses a portable sh loop to print "<mtime> <path>" instead of GNU-only `-printf`,
+  -- falling back to BSD stat on macOS
   return "find " ..
       dirs ..
+      searchRoot ..
       "-maxdepth " .. maxDepth .. " " ..
       "-type f " ..
       "-mtime -" .. changedWithin .. " " ..
-      "-not -path '*/.*' " ..
-      "-not -path '*/node_modules/*' " ..
-      "-not -path '*/.git/*' " ..
-      "-printf '%T@ %p\\n' 2>/dev/null " ..
-      "| sort -rn " ..
-      "| head -" .. resultLimit .. " " ..
-      "| cut -d' ' -f2- " ..
-      "| fzf " ..
-      "--prompt='Recent File> ' " ..
-      "--preview='bat --color=always --style=numbers --line-range :100 {} 2>/dev/null || ls -lh {}' " ..
-      "--preview-window='right:60%:wrap' " ..
-      "--header='Enter=COPY • Ctrl-X=MOVE • Sorted by modification time' " ..
-      "--bind='ctrl-d:preview-down,ctrl-u:preview-up' " ..
-      "--expect='enter,ctrl-x'"
+      excludes ..
+      "-exec sh -c 'for f; do printf \"%s %s\\n\" \"$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\")\" \"$f\"; done' sh {} + " ..
+      absFilter ..
+      get_extra_cmd(resultLimit)
+end)
+
+local reveal_file = ya.sync(function(_, file)
+  ya.emit("reveal", { file })
+end)
+
+local yank_file = ya.sync(function(_, file, cut)
+  local cwd = tostring(cx.active.current.cwd)
+  ya.emit("reveal", { file })
+  ya.emit("yank", { cut = cut })
+  ya.emit("cd", { cwd })
 end)
 
 function M:entry()
@@ -133,11 +181,29 @@ function M:entry()
     return ya.notify { title = "Duck Radar", content = "No file selected", timeout = 3 }
   end
 
-  local action = lines[1] == "ctrl-x" and "move" or "copy"
+  local action = "jump"
+  if lines[1] == "ctrl-x" then
+    action = "move"
+  elseif lines[1] == "ctrl-y" then
+    action = "copy"
+  end
   local file = lines[2]
   local cwd = get_cwd()
 
   ya.dbg("Action: " .. action .. " on " .. file)
+
+  if action == "jump" then
+    return reveal_file(file)
+  end
+
+  if get_pasteBuffer() then
+    yank_file(file, action == "move")
+    return ya.notify {
+      title = "Duck Radar",
+      content = string.format("%s for paste — press 'p' to paste", action == "move" and "Cut" or "Copied"),
+      timeout = 3
+    }
+  end
 
   local safe_file = "'" .. file:gsub("'", "'\\''") .. "'"
   local cmd_verb = action == "move" and "mv" or "cp -r"
