@@ -2,7 +2,7 @@
 
 A [Yazi](https://github.com/sxyazi/yazi) plugin for quickly finding and copying/moving recently modified files to your current directory.
 
-Duck Radar scans your common directories (Downloads, Documents, Desktop) for files modified in the last 7 days and presents them in an interactive fzf picker with syntax-highlighted previews. Perfect for grabbing that file you just downloaded or worked on without navigating through folders.
+Duck Radar scans the current directory plus any directories you configure for files modified in the last 7 days and presents them in an interactive fzf picker with syntax-highlighted previews. Perfect for grabbing that file you just downloaded or worked on without navigating through folders.
 
 ## Requirements
 
@@ -50,7 +50,7 @@ desc = "🦆 Duck Radar - Recent Files"
 
 ## Features
 
-- **Smart Search**: Finds files modified in the last 7 days across Downloads, Documents, Desktop
+- **Smart Search**: Finds files modified in the last 7 days across the current directory and your configured `dirs`
 - **Fast Performance**: Limited depth (3 levels) and top 200 results for instant response
 - **Copy, Move, or Jump**: Press `Enter` to jump to the file in place, `Ctrl-Y` to copy it, `Ctrl-X` to move it
 - **Rich Preview**: Syntax-highlighted file contents with bat
@@ -73,9 +73,9 @@ Add the following to your `~/.config/yazi/init.lua` (all fields are optional; de
 
 ```lua
 require("duck-radar"):setup({
-    -- Extra dirs to search in addition to ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures
+    -- Dirs to search. Empty by default — set these, or rely on includeCwd
     dirs = {
-        -- "/path/to/extra/dir",
+        -- os.getenv("HOME") .. "/Downloads",
     },
     -- Patterns to exclude from search. Plain names (e.g. "node_modules")
     -- match that file/dir at any depth. Patterns starting with "/" are
@@ -102,7 +102,7 @@ Example using `fd`, extra directories search:
 
 ```lua
 require("duck-radar"):setup({
-    -- Extra dirs to search in addition to ~/Downloads, ~/Documents, ~/Desktop, ~/Pictures
+    -- Dirs to search (no defaults)
     dirs = {
         -- Launch directory
         os.getenv("PWD"),
@@ -134,6 +134,26 @@ require("duck-radar"):setup({
     includeCwd = true,
 })
 ```
+
+## Migrating
+
+If you used Duck Radar before `dirs` became configurable:
+
+- **There are no default directories anymore.** With no `dirs` set, the plugin only
+  searches the current directory (via `includeCwd`). Add the old defaults back
+  explicitly if you want them:
+  ```lua
+  dirs = {
+      os.getenv("HOME") .. "/Downloads",
+      os.getenv("HOME") .. "/Documents",
+      os.getenv("HOME") .. "/Desktop",
+      os.getenv("HOME") .. "/Pictures",
+  },
+  ```
+- **`changedWithin` is now a plain number of days** for both `find` and `fd`.
+  The old `"7d"` string still works (the trailing `d` is stripped), but prefer `7`.
+- **Hidden files are now included.** The old `find` path silently skipped dotfiles;
+  add the names you don't want to `excludePatterns` (e.g. `".git"`, `".cache"`).
 
 ## Acknowledgements
 

@@ -8,19 +8,15 @@ end
 
 local apply_config = ya.sync(function(st, cfg)
   cfg = cfg or {}
-  local dirs = cfg.dirs or {}
-
-  for i = 1, #cfg.dirs do
-    dirs[#dirs + 1] = cfg.dirs[i]
-  end
-
-  for i = 1, #dirs do
-    dirs[i] = "'" .. dirs[i]:gsub("'", "'\\''") .. "'"
+  local dirs = {}
+  for i = 1, #(cfg.dirs or {}) do
+    dirs[i] = "'" .. cfg.dirs[i]:gsub("'", "'\\''") .. "'"
   end
 
   st.dirs = table.concat(dirs, " ")
   st.app = cfg.app or "find"
-  st.changedWithin = cfg.changedWithin or 7
+  -- accepts 7, "7" or the legacy "7d"
+  st.changedWithin = tonumber(tostring(cfg.changedWithin or 7):match("^%s*(%d+)")) or 7
   st.maxDepth = cfg.maxDepth or "3"
   st.resultLimit = cfg.resultLimit or "200"
   st.pasteBuffer = cfg.pasteBuffer or false
@@ -55,9 +51,10 @@ end
 
 local function get_extra_cmd(resultLimit)
   return "| sort -rn " ..
-      "| head -" .. resultLimit .. " " ..
       "| cut -d' ' -f2- " ..
-      "| awk '!seen[$0]++' " ..  -- this fixes duplicates from overlapping search roots 
+      -- dedupe before `head` so duplicates from overlapping roots don't eat result slots
+      "| awk '!seen[$0]++' " ..
+      "| head -" .. resultLimit .. " " ..
       "| fzf " ..
       "--prompt='Recent File> ' " ..
       "--preview='bat --color=always --style=numbers --line-range :100 {} 2>/dev/null || ls -lh {}' " ..
@@ -79,7 +76,7 @@ local get_cmd_fd = ya.sync(function(st)
   local changedWithin = st.changedWithin .. "d"
   local maxDepth = st.maxDepth
   local resultLimit = st.resultLimit
-  local searchRoot = st.includeCwd and (get_cwd() .. " ") or ""
+  local searchRoot = st.includeCwd and (tostring(cx.active.current.cwd) .. " ") or ""
 
   local excludeFlags = {}
   for i = 1, #st.excludeNames do
@@ -98,7 +95,7 @@ local get_cmd_fd = ya.sync(function(st)
       "--changed-within " .. changedWithin .. " " ..
       "--hidden --no-ignore " ..
       excludes ..
-      "--exec-batch sh -c 'for f; do printf \"%s %s\\n\" \"$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\")\" \"$f\"; done' sh " ..
+      "--exec-batch sh -c 'for f; do printf \"%s %s\\n\" \"$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\")\" \"$f\"; done' sh 2>/dev/null " ..
       absFilter ..
       get_extra_cmd(resultLimit)
 end)
@@ -108,14 +105,17 @@ local get_cmd_find = ya.sync(function(st)
   local changedWithin = st.changedWithin
   local maxDepth = st.maxDepth
   local resultLimit = st.resultLimit
-  local searchRoot = st.includeCwd and (get_cwd() .. " ") or ""
+  local searchRoot = st.includeCwd and (tostring(cx.active.current.cwd) .. " ") or ""
 
-  local excludeFlags = {}
-  for i = 1, #st.excludeNames do
-    local p = st.excludeNames[i]
-    excludeFlags[i] = "-not -name " .. p .. " -not -path '*/" .. p:sub(2, -2) .. "/*'"
+  -- `-prune` skips the whole subtree, unlike `-not -name` which only hides it from output
+  local excludes = ""
+  if #st.excludeNames > 0 then
+    local names = {}
+    for i = 1, #st.excludeNames do
+      names[i] = "-name " .. st.excludeNames[i]
+    end
+    excludes = "\\( " .. table.concat(names, " -o ") .. " \\) -prune -o "
   end
-  local excludes = table.concat(excludeFlags, " ") .. " "
   local absFilter = abs_path_filter(st.excludeAbsPaths)
 
   -- Uses a portable sh loop to print "<mtime> <path>" instead of GNU-only `-printf`,
@@ -124,10 +124,10 @@ local get_cmd_find = ya.sync(function(st)
       dirs ..
       searchRoot ..
       "-maxdepth " .. maxDepth .. " " ..
+      excludes ..
       "-type f " ..
       "-mtime -" .. changedWithin .. " " ..
-      excludes ..
-      "-exec sh -c 'for f; do printf \"%s %s\\n\" \"$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\")\" \"$f\"; done' sh {} + " ..
+      "-exec sh -c 'for f; do printf \"%s %s\\n\" \"$(stat -c %Y \"$f\" 2>/dev/null || stat -f %m \"$f\")\" \"$f\"; done' sh {} + 2>/dev/null " ..
       absFilter ..
       get_extra_cmd(resultLimit)
 end)
